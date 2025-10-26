@@ -18,6 +18,9 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'car.fill': 'directions-car',
+  'mappin.and.ellipse': 'location-pin',
+  'waveform.path.ecg': 'timeline'
 } as IconMapping;
 
 /**
