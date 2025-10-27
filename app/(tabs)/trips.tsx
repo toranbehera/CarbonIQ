@@ -8,7 +8,6 @@ export default function TripsScreen() {
         <ThemedView style={styles.titleContainer}>
             <ThemedText type='title'>Trips</ThemedText>
         </ThemedView>
-        
     </>
   );
 }

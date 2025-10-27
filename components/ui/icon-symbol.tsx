@@ -20,7 +20,9 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'car.fill': 'directions-car',
   'mappin.and.ellipse': 'location-pin',
-  'waveform.path.ecg': 'timeline'
+  'waveform.path.ecg': 'timeline',
+  'trash': 'delete-outline',
+  'plus': 'add'
 } as IconMapping;
 
 /**

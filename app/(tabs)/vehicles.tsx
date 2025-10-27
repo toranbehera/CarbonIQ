@@ -1,92 +1,97 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Fonts } from '@/constants/theme';
+import { Pressable, StyleSheet, ScrollView, Text, View } from 'react-native';
+import { init, i , id} from '@instantdb/react-native';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+
+// ID for app: CarbonTracker
+const APP_ID = 'd8681029-bc7b-4e69-886b-74815444c014';
+
+// Optional: You can declare a schema!
+const schema = i.schema({
+  entities: {
+    vehicles: i.entity({
+      vehicleId: i.string(),
+      name: i.string(),
+      vin: i.string(),
+      body: i.string(),
+      fuel: i.string(),
+      vehicleType: i.string(),
+      year: i.number(),
+      trend: i.number(),
+      ownerId: i.string()
+    }),
+  },
+});
+
+interface vehicle {
+  id: string; 
+  vehicleId: string; 
+  name: string; 
+  vin: string; 
+  body: string; 
+  fuel: string; 
+  vehicleType: string; 
+  year: number; 
+  trend: number; 
+  ownerId: string;
+}
+
+const vehicle = {
+  vehicleId: "VH12345",
+  name: "Tesla Model 3",
+  vin: "5YJ3E1EA7JF000123",
+  body: "Sedan",
+  fuel: "Electric",
+  vehicleType: "Passenger",
+  year: 2023,
+  trend: 8,
+  ownerId: "USR001"
+};
+
+const db = init({ appId: APP_ID, schema });
+
+// const selectId = '4d39508b-9ee2-48a3-b70d-8192d9c5a059';
 
 export default function VehiclesScreen() {
+  const query = { vehicles: {} };
+  const { data } = db.useQuery(query);
+  console.log(data?.vehicles);
+
+  const vehicles: vehicle[] | undefined = data?.vehicles;
+
   return (
-    <>
+    <View style={styles.vehiclesPageContainer}>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
+          <ThemedText type='title'>Vehicles</ThemedText>
       </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </>
+      <ScrollView style={styles.vehiclesContainer}>
+        {vehicles?.map((v) => (
+            <ThemedView style={styles.vehicleCard} key={v.id}>
+              <ThemedText>{v.name}</ThemedText>
+              <Pressable
+                onPress={() => db.transact(db.tx.vehicles[v.id].delete())}
+              >
+                <IconSymbol size={28} name="trash" color='black' />
+              </Pressable>
+            </ThemedView>
+        ))
+        }
+      </ScrollView>
+      <Pressable 
+        style={styles.addVehicleButton}
+        onPress={() => db.transact(db.tx.vehicles[id()].create(vehicle))}
+      >
+        <IconSymbol size={28} name="plus" color='white' />
+        <Text style={styles.addVehicleButtonText}>New Car</Text>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  vehiclesPageContainer: {
+  },
   headerImage: {
     color: '#808080',
     bottom: -90,
@@ -94,8 +99,94 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   titleContainer: {
-    flexDirection: 'row',
     gap: 8,
+    padding: 10
+  },
+  vehiclesContainer:{
+    maxHeight: '80%'
+  },
+  vehicleCard: {
+    margin: 15,
+    padding: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between'
+  },
+  addVehicleButton: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'black',
     padding: 10,
+    borderRadius: 10,
+    top: 500,
+    position: 'absolute'
+  },
+  addVehicleButtonText: {
+    color: 'white'
   },
 });
+
+// const registerVehicle = async () => {
+//   if (!vehicle || !userData) return;
+//   const newVehicleId = Date.now().toString();
+//   const newV: Vehicle = {
+//     id: newVehicleId,
+//     name: `${vehicle.make} ${vehicle.model}`,
+//     vin,
+//     body: vehicle.body,
+//     fuel: vehicle.fuelTypePrimary,
+//     vehicleType: vehicle.vehicleType,
+//     year: vehicle.year,
+//     trend: generateRandomTrend(),
+//     ownerId: currentUserId,
+//   };
+
+//   const updatedUser = {
+//     ...userData,
+//     vehicles: [...userData.vehicles, newV],
+//   };
+
+//   setUserData(updatedUser);
+//   await saveLocalData(updatedUser);
+//   LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+//   setVin("");
+//   setVehicle(null);
+//   setVinModal(false);
+// };
+
+//   const decodeVin = async () => {
+//   const v = vin.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+//   if (v.length < 11) return setError("VIN must be at least 11 characters.");
+//   setError("");
+//   setLoading(true);
+//   try {
+//     const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${v}?format=json`);
+//     const data = await res.json();
+//     const r = data?.Results?.[0] || {};
+//     const info = {
+//       make: r.Make || "Unknown",
+//       model: r.Model || "Unknown",
+//       year: r.ModelYear || 0,
+//       body: r.BodyClass || "Unknown",
+//       vehicleType: r.VehicleType || "Unknown",
+//       fuelTypePrimary: r.FuelTypePrimary || "Unknown",
+//     };
+//     if (!info.make || info.make === "Unknown") {
+//       setError("Could not decode VIN");
+//       setVehicle(null);
+//     } else {
+//       setVehicle(info);
+//     }
+//   } catch {
+//     setError("Network error. Please check your connection and try again.");
+//     setVehicle(null);
+//   } finally {
+//     setLoading(false);
+//   }
+// };
+
+// const generateRandomTrend = () => {
+//   const base = 170;
+//   return Array.from({ length: 5 }, (_, i) => base - Math.floor(Math.random() * 10) * (i + 1));
+// };
