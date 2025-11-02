@@ -1,22 +1,34 @@
 // app/(tabs)/start.tsx
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
-  Modal,
-  FlatList,
-  SafeAreaView,
+  Alert,
   Dimensions,
+  FlatList,
+  Modal,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
-import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import WiFiOBDConfig from '../../components/TCPConfig';
+import EmissionsCalculator from '../../services/EmissionsCalculator';
+import WiFiOBDService, { OBDConnectionStatus, OBDData } from '../../services/TCPOBDService';
+// Only import maps on native platforms
+let MapView: any, Marker: any, Polyline: any, PROVIDER_GOOGLE: any;
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  Polyline = maps.Polyline;
+  PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+}
 
 type Coord = { latitude: number; longitude: number };
 type Trip = { route: Coord[]; distance: string; emissions: string; timestamp: string };
@@ -28,6 +40,41 @@ interface Car {
   fuelType: string;
   engineType: string;
 }
+
+// Emissions calculation based on fuel type
+const getEmissionsFactor = (fuelType: string): number => {
+  // CO₂ emission factors (kg CO₂ per liter of fuel)
+  const factors: Record<string, number> = {
+    'Gasoline': 2.31,    // kg CO₂ per liter
+    'Petrol': 2.31,       // same as gasoline
+    'Diesel': 2.68,       // kg CO₂ per liter
+    'Electric': 0,         // 0 if using renewable energy
+    'Hybrid': 1.55,       // average hybrid
+  };
+  return factors[fuelType] || 2.31; // default to gasoline
+};
+
+// Calculate emissions from MAF (Mass Air Flow) if available
+const calculateEmissionsFromMAF = (maf: number, fuelType: string, timeElapsed: number): number => {
+  // MAF is in g/s, time in seconds
+  // Rough conversion: MAF -> fuel consumption rate
+  // Air-fuel ratio is typically ~14.7:1 for gasoline, ~14.5:1 for diesel
+  const airFuelRatio = fuelType.toLowerCase().includes('diesel') ? 14.5 : 14.7;
+  
+  // Convert MAF (g/s) to fuel mass (g/s)
+  const fuelMassGs = maf / airFuelRatio; // grams per second of fuel
+  
+  // Convert to liters per second (assuming fuel density ~0.75 g/cm³ for gasoline)
+  const fuelDensity = 0.75; // g/cm³ = kg/L
+  const fuelMassKg = fuelMassGs / 1000; // kg/s
+  const fuelVolumeLiters = fuelMassKg / fuelDensity; // L/s
+  
+  // Get emissions factor
+  const emissionsFactor = getEmissionsFactor(fuelType);
+  
+  // Calculate CO₂ emissions: liters_per_second × emissions_factor × time
+  return fuelVolumeLiters * emissionsFactor * timeElapsed; // kg CO₂
+};
 
 const { height: WINDOW_HEIGHT } = Dimensions.get('window');
 const MAP_HEIGHT = Math.round(WINDOW_HEIGHT * 0.42); // map height fixed so panel is visible
@@ -58,9 +105,15 @@ export default function StartScreen() {
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [carModalVisible, setCarModalVisible] = useState(false);
   const [obdEnabled, setObdEnabled] = useState<boolean>(false);
+  const [obdConnected, setObdConnected] = useState<boolean>(false);
+  const [obdDeviceName, setObdDeviceName] = useState<string>('');
+  const [obdConnecting, setObdConnecting] = useState<boolean>(false);
+  const [wifiConfigVisible, setWifiConfigVisible] = useState<boolean>(false);
   const [lastTrip, setLastTrip] = useState<Trip | null>(null);
   const watchRef = useRef<Location.LocationSubscription | null>(null);
   const telemetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wifiOBDServiceRef = useRef<WiFiOBDService | null>(null);
+  const lastTickTimeRef = useRef<number>(Date.now() / 1000);
 
   // --- get permission & initial location ---
   useEffect(() => {
@@ -85,8 +138,35 @@ export default function StartScreen() {
       // cleanup
       if (watchRef.current?.remove) watchRef.current.remove();
       if (telemetryRef.current) clearInterval(telemetryRef.current);
+      if (wifiOBDServiceRef.current) {
+        wifiOBDServiceRef.current.disconnect();
+        wifiOBDServiceRef.current.destroy();
+      }
     };
   }, []);
+
+  // --- Emissions calculation from OBD data when tracking and OBD connected ---
+  useEffect(() => {
+    if (!isTracking) return;
+
+    const currentTime = Date.now() / 1000;
+    const dt_s = currentTime - lastTickTimeRef.current;
+    lastTickTimeRef.current = currentTime;
+
+    // Only use emissions calculator when OBD is connected and we have real data
+    if (obdConnected && maf > 0 && speed > 0) {
+      const outputs = EmissionsCalculator.ingestTick({
+        dt_s,
+        speed_mps: speed / 3.6, // km/h to m/s
+        maf_gps: maf,
+      });
+
+      // Update emissions and distance from the calculator
+      setEmissions(outputs.total_co2_g / 1000); // convert g to kg
+      setDistance(outputs.distance_km);
+    }
+    // When OBD not connected, emissions remain at 0 (no fake data)
+  }, [isTracking, obdConnected, maf, speed]);
 
   // haversine distance (km)
   const toRad = (v: number) => (v * Math.PI) / 180;
@@ -100,6 +180,64 @@ export default function StartScreen() {
     return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   };
 
+  // WiFi OBD connection functions
+  const initializeWiFiOBDService = () => {
+    if (!wifiOBDServiceRef.current) {
+      wifiOBDServiceRef.current = new WiFiOBDService();
+      
+      // Set up WiFi OBD data callback
+      wifiOBDServiceRef.current.setDataCallback((data: OBDData) => {
+        setSpeed(data.speed);
+        setRpm(data.rpm);
+        setMaf(data.maf);
+        setEngineLoad(data.engineLoad);
+        setThrottle(data.throttle);
+      });
+
+      // Set up WiFi OBD status callback
+      wifiOBDServiceRef.current.setStatusCallback((status: OBDConnectionStatus) => {
+        setObdConnected(status.isConnected);
+        setObdDeviceName(status.deviceName || '');
+        setObdConnecting(false);
+        
+        if (status.error) {
+          Alert.alert('WiFi OBD Connection Error', status.error);
+        }
+      });
+    }
+  };
+
+  const toggleOBDConnection = async () => {
+    if (!obdEnabled) {
+      // Show WiFi OBD configuration modal
+      setWifiConfigVisible(true);
+    } else {
+      // Disable WiFi OBD
+      await wifiOBDServiceRef.current?.disconnect();
+      setObdConnected(false);
+      setObdDeviceName('');
+      setObdEnabled(false);
+    }
+  };
+
+  const handleWiFiConfigSaved = async (config: { host: string; port: number }) => {
+    setWifiConfigVisible(false);
+    initializeWiFiOBDService();
+    setObdConnecting(true);
+    setObdEnabled(true);
+    
+    // Set config and connect
+    try {
+      wifiOBDServiceRef.current?.setConfig(config);
+      await wifiOBDServiceRef.current?.connect();
+    } catch (error) {
+      console.error('Failed to connect to WiFi OBD:', error);
+      Alert.alert('Connection Failed', 'Could not connect to WiFi OBD adapter');
+      setObdConnecting(false);
+      setObdEnabled(false);
+    }
+  };
+
   // start recording
   const startTrip = async () => {
     if (!selectedCar) {
@@ -107,6 +245,10 @@ export default function StartScreen() {
       return;
     }
 
+    // Reset emissions calculator for new trip
+    EmissionsCalculator.reset();
+    lastTickTimeRef.current = Date.now() / 1000;
+    
     setIsTracking(true);
     setRoute([]);
     setDistance(0);
@@ -117,19 +259,19 @@ export default function StartScreen() {
     setEngineLoad(0);
     setThrottle(0);
 
-    // telemetry simulation updates once per second
-    telemetryRef.current = setInterval(() => {
-      // speed between 20 - 80 km/h with small random variation
-      setSpeed((s) => Math.max(0, +(s + (Math.random() - 0.45) * 3).toFixed(1) || 30));
-      // rpm roughly linked to speed
-      setRpm((r) => Math.round(800 + (Math.random() * 3000)));
-      // MAF random plausible value
-      setMaf((m) => +(2 + Math.random() * 40).toFixed(2));
-      setEngineLoad((el) => +(10 + Math.random() * 80).toFixed(1));
-      setThrottle((t) => +(Math.max(0, Math.random() * 60)).toFixed(1));
-      // quick emission bump tied to speed: small coefficient
-      setEmissions((e) => +(e + (Math.random() * 0.002 + 0.001) * (speed / 50 || 1)).toFixed(3));
-    }, 1000);
+    // telemetry simulation updates once per second (only if OBD not connected)
+    if (!obdConnected) {
+      telemetryRef.current = setInterval(() => {
+        // speed between 20 - 80 km/h with small random variation
+        setSpeed((s) => Math.max(0, +(s + (Math.random() - 0.45) * 3).toFixed(1) || 30));
+        // rpm roughly linked to speed
+        setRpm((r) => Math.round(800 + (Math.random() * 3000)));
+        // MAF random plausible value
+        setMaf((m) => +(2 + Math.random() * 40).toFixed(2));
+        setEngineLoad((el) => +(10 + Math.random() * 80).toFixed(1));
+        setThrottle((t) => +(Math.max(0, Math.random() * 60)).toFixed(1));
+      }, 1000);
+    }
 
     // watch position
     try {
@@ -142,8 +284,10 @@ export default function StartScreen() {
               const last = prev[prev.length - 1];
               const d = haversine(last, coords);
               setDistance((prevDist) => +(prevDist + d).toFixed(3));
-              // emissions also roughly scale with added distance
-              setEmissions((prevEm) => +(prevEm + d * 0.18).toFixed(3));
+              // emissions only from distance when OBD not connected (otherwise from EmissionsCalculator)
+              if (!obdConnected) {
+                setEmissions((prevEm) => +(prevEm + d * 0.18).toFixed(3));
+              }
             }
             return [...prev, coords];
           });
@@ -212,21 +356,27 @@ export default function StartScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <MapView
-        provider={PROVIDER_GOOGLE}
-        style={[styles.map, { height: MAP_HEIGHT }]}
-        initialRegion={{
-          latitude: location?.latitude || -37.6822,
-          longitude: location?.longitude || 144.5808,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        }}
-      >
-        {route.map((c, i) => (
-          <Marker key={i} coordinate={c} />
-        ))}
-        {route.length > 1 && <Polyline coordinates={route} strokeWidth={4} strokeColor="#2a9d8f" />}
-      </MapView>
+      {Platform.OS !== 'web' && MapView ? (
+        <MapView
+          provider={PROVIDER_GOOGLE}
+          style={[styles.map, { height: MAP_HEIGHT }]}
+          initialRegion={{
+            latitude: location?.latitude || -37.6822,
+            longitude: location?.longitude || 144.5808,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }}
+        >
+          {route.map((c, i) => (
+            <Marker key={i} coordinate={c} />
+          ))}
+          {route.length > 1 && <Polyline coordinates={route} strokeWidth={4} strokeColor="#2a9d8f" />}
+        </MapView>
+      ) : (
+        <View style={[styles.map, { height: MAP_HEIGHT, backgroundColor: '#e0e0e0', justifyContent: 'center', alignItems: 'center' }]}>
+          <Text style={{ color: '#666' }}>Map not available</Text>
+        </View>
+      )}
 
       <ScrollView style={styles.panel} contentContainerStyle={{ paddingBottom: 20 }}>
         {/* Car select row */}
@@ -244,12 +394,20 @@ export default function StartScreen() {
           </View>
 
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.label}>OBD</Text>
+            <Text style={styles.label}>WiFi OBD</Text>
             <TouchableOpacity
-              style={[styles.obdBtn, obdEnabled ? styles.obdOn : styles.obdOff]}
-              onPress={() => setObdEnabled((p) => !p)}
+              style={[
+                styles.obdBtn, 
+                obdConnecting ? styles.obdConnecting : 
+                obdConnected ? styles.obdOn : styles.obdOff
+              ]}
+              onPress={toggleOBDConnection}
+              disabled={obdConnecting}
             >
-              <Text style={styles.obdBtnText}>{obdEnabled ? 'Connected' : 'Off'}</Text>
+              <Text style={styles.obdBtnText}>
+                {obdConnecting ? 'Connecting...' : 
+                 obdConnected ? 'Connected' : 'Off'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -287,7 +445,9 @@ export default function StartScreen() {
         {/* Telemetry when recording */}
         {isTracking && (
           <View style={styles.telemetry}>
-            <Text style={styles.teleTitle}>Live telemetry</Text>
+            <Text style={styles.teleTitle}>
+              Live telemetry {obdConnected ? `(WiFi OBD: ${obdDeviceName})` : '(Simulated)'}
+            </Text>
             <View style={styles.teleRow}>
               <Text style={styles.teleLabel}>Speed</Text>
               <Text style={styles.teleValue}>{speed.toFixed(1)} km/h</Text>
@@ -358,6 +518,18 @@ export default function StartScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* WiFi OBD Configuration Modal */}
+      <Modal visible={wifiConfigVisible} animationType="slide" transparent>
+        <View style={styles.modalBg}>
+          <View style={styles.wifiModalCard}>
+            <WiFiOBDConfig
+              onConfigSaved={handleWiFiConfigSaved}
+              onClose={() => setWifiConfigVisible(false)}
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -386,6 +558,7 @@ const styles = StyleSheet.create({
   obdBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, marginTop: 6 },
   obdOn: { backgroundColor: '#2ecc71' },
   obdOff: { backgroundColor: '#e0e0e0' },
+  obdConnecting: { backgroundColor: '#f39c12' },
   obdBtnText: { color: '#fff', fontWeight: '700' },
   infoBox: { backgroundColor: '#fff', padding: 12, borderRadius: 10, marginBottom: 12, borderColor: '#eee', borderWidth: 1 },
   infoLine: { color: '#333', marginBottom: 6 },
@@ -410,6 +583,7 @@ const styles = StyleSheet.create({
   // modal styles
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 20 },
   modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, maxHeight: '70%' },
+  wifiModalCard: { backgroundColor: '#fff', borderRadius: 12, maxHeight: '80%', width: '100%' },
   modalTitle: { fontSize: 18, fontWeight: '800', marginBottom: 12 },
   carItem: { paddingVertical: 12, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#fafafa' },
   carItemTitle: { fontWeight: '700' },
