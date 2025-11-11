@@ -62,54 +62,48 @@ export default function VehiclesScreen() {
 
   return (
     <View style={styles.vehiclesPageContainer}>
-      <ThemedView style={styles.titleContainer}>
-          <ThemedText type='title'>Vehicles</ThemedText>
-      </ThemedView>
-      <ScrollView style={styles.vehiclesContainer}>
-        {vehicles?.map((v) => (
-            <ThemedView style={styles.vehicleCard} key={v.id}>
-              <ThemedText>{v.name}</ThemedText>
-              <Pressable
-                onPress={() => db.transact(db.tx.vehicles[v.id].delete())}
-              >
-                <IconSymbol size={28} name="trash" color='black' />
-              </Pressable>
-            </ThemedView>
-        ))
-        }
-      </ScrollView>
+      <View>
+          <ScrollView style={styles.vehiclesContainer}>
+            {vehicles?.map((v) => (
+                <ThemedView style={styles.vehicleCard} key={v.id}>
+                  <ThemedText style={{fontSize: 20, fontWeight: '500'}}>{v.name}</ThemedText>
+                  <Pressable
+                    onPress={() => db.transact(db.tx.vehicles[v.id].delete())}
+                  >
+                    <IconSymbol size={28} name="trash" color='black' />
+                  </Pressable>
+                </ThemedView>
+              ))
+            }
+        </ScrollView>
+      </View>
       <Pressable 
         style={styles.addVehicleButton}
         onPress={() => db.transact(db.tx.vehicles[id()].create(vehicle))}
       >
         <IconSymbol size={28} name="plus" color='white' />
         <Text style={styles.addVehicleButtonText}>New Car</Text>
-      </Pressable>
+      </Pressable>       
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   vehiclesPageContainer: {
-  },
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    gap: 8,
-    padding: 10
+    marginVertical: 40,
+    justifyContent: 'space-between'
   },
   vehiclesContainer:{
-    maxHeight: '80%'
+    height: '90%',
   },
   vehicleCard: {
     margin: 15,
-    padding: 15,
+    padding: 20,
+    borderRadius: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    elevation: 6,
+    
   },
   addVehicleButton: {
     flexDirection: 'row',
@@ -118,12 +112,11 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: 'black',
     padding: 10,
-    borderRadius: 10,
-    top: 500,
-    position: 'absolute'
+    borderRadius: 8,
   },
   addVehicleButtonText: {
-    color: 'white'
+    color: 'white',
+    fontSize: 16
   },
 });
 
