@@ -20,11 +20,6 @@ const _schema = i.schema({
       rpm: i.number(),
       throttlePosition: i.number(),
     }),
-    todos: i.entity({
-      createdAt: i.number().optional(),
-      done: i.boolean().optional(),
-      text: i.string().optional(),
-    }),
     vehicles: i.entity({
       vehicleId: i.string(),
       name: i.string(),
@@ -32,6 +27,7 @@ const _schema = i.schema({
       body: i.string(),
       fuel: i.string(),
       vehicleType: i.string(),
+      engineType: i.string(),
       year: i.number(),
       trend: i.number(),
       ownerId: i.string()

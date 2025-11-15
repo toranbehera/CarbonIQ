@@ -20,6 +20,8 @@ import {
 import WiFiOBDConfig from '../../components/TCPConfig';
 import EmissionsCalculator from '../../services/EmissionsCalculator';
 import WiFiOBDService, { OBDConnectionStatus, OBDData } from '../../services/TCPOBDService';
+import { i, init, id } from '@instantdb/react-native';
+
 // Only import maps on native platforms
 let MapView: any, Marker: any, Polyline: any, PROVIDER_GOOGLE: any;
 if (Platform.OS !== 'web') {
@@ -33,12 +35,47 @@ if (Platform.OS !== 'web') {
 type Coord = { latitude: number; longitude: number };
 type Trip = { route: Coord[]; distance: string; emissions: string; timestamp: string };
 
+const APP_ID = "d8681029-bc7b-4e69-886b-74815444c014";
+
+const schema = i.schema({
+  entities: {
+    vehicles: i.entity({
+      vehicleId: i.string(),
+      name: i.string(),
+      vin: i.string(),
+      body: i.string(),
+      fuel: i.string(),
+      vehicleType: i.string(),
+      engineType: i.string(),
+      year: i.number(),
+      trend: i.number(),
+      ownerId: i.string()
+    }),
+    obd_metrics: i.entity({
+      speed: i.number(),
+      maf: i.number(),
+      engineLoad: i.number(),
+      rpm: i.number(),
+      throttlePosition: i.number(),
+    }),
+  },
+});
+
+const db = init({ appId: APP_ID, schema });
+const currentUserId = "USR001";
+
 interface Car {
   id: string;
+  vehicleId: string;
   name: string;
-  model: string;
-  fuelType: string;
+  vin: string;
+  body: string;
+  fuel: string;
+  vehicleType: string;
   engineType: string;
+  year: number;
+  trend: number;
+  ownerId: string;
 }
 
 // Emissions calculation based on fuel type
@@ -82,12 +119,10 @@ const MAP_HEIGHT = Math.round(WINDOW_HEIGHT * 0.42); // map height fixed so pane
 export default function StartScreen() {
   const router = useRouter();
 
+  const query = { vehicles: {} };
+  const { data } = db.useQuery(query);
   // --- demo cars (replace with your real vehicles later) ---
-  const demoCars: Car[] = [
-    { id: 'c1', name: 'Honda Civic', model: 'Civic 2018', fuelType: 'Gasoline', engineType: '1.5L Turbo' },
-    { id: 'c2', name: 'Toyota Corolla', model: 'Corolla 2020', fuelType: 'Petrol', engineType: '1.8L' },
-    { id: 'c3', name: 'Ford Ranger', model: 'Ranger 2019', fuelType: 'Diesel', engineType: '2.0L' },
-  ];
+  const demoCars: any = data?.vehicles;
 
   // --- state ---
   const [cars] = useState<Car[]>(demoCars);
@@ -270,6 +305,16 @@ export default function StartScreen() {
         setMaf((m) => +(2 + Math.random() * 40).toFixed(2));
         setEngineLoad((el) => +(10 + Math.random() * 80).toFixed(1));
         setThrottle((t) => +(Math.max(0, Math.random() * 60)).toFixed(1));
+
+        const data = {
+          speed: Math.max(0, +(speed + (Math.random() - 0.45) * 3).toFixed(1) || 30),
+          rpm: Math.round(800 + Math.random() * 3000),
+          maf: +(2 + Math.random() * 40).toFixed(2),
+          engineLoad: +(10 + Math.random() * 80).toFixed(1),
+          throttlePosition: +(Math.max(0, Math.random() * 60)).toFixed(1),
+        };
+
+        db.transact(db.tx.obd_metrics[id()].create(data));
       }, 1000);
     }
 
@@ -341,7 +386,7 @@ export default function StartScreen() {
       }}
     >
       <Text style={styles.carItemTitle}>{item.name}</Text>
-      <Text style={styles.carItemSub}>{item.model}</Text>
+      {/* <Text style={styles.carItemSub}>{item.model}</Text> */}
     </TouchableOpacity>
   );
 
@@ -389,7 +434,7 @@ export default function StartScreen() {
               activeOpacity={0.8}
             >
               <Text style={styles.selectText}>{selectedCar ? selectedCar.name : 'Select car'}</Text>
-              <Text style={styles.selectSub}>{selectedCar ? selectedCar.model : ''}</Text>
+              {/* <Text style={styles.selectSub}>{selectedCar ? selectedCar.model : ''}</Text> */}
             </TouchableOpacity>
           </View>
 
@@ -417,11 +462,11 @@ export default function StartScreen() {
           <View style={styles.infoBox}>
             <Text style={styles.infoLine}>
               <Text style={styles.infoLabel}>Model: </Text>
-              {selectedCar.model}
+              {selectedCar.name}
             </Text>
             <Text style={styles.infoLine}>
               <Text style={styles.infoLabel}>Fuel type: </Text>
-              {selectedCar.fuelType}
+              {selectedCar.fuel}
             </Text>
             <Text style={styles.infoLine}>
               <Text style={styles.infoLabel}>Engine: </Text>
