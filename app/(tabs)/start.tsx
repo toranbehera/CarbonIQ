@@ -10,7 +10,6 @@ import {
   FlatList,
   Modal,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -121,12 +120,11 @@ export default function StartScreen() {
 
   const query = { vehicles: {} };
   const { data } = db.useQuery(query);
-  // --- demo cars (replace with your real vehicles later) ---
-  const demoCars: any = data?.vehicles;
+
+  const cars: any = data?.vehicles;
 
   // --- state ---
-  const [cars] = useState<Car[]>(demoCars);
-  const [selectedCar, setSelectedCar] = useState<Car | null>(demoCars[0] ?? null);
+  const [selectedCar, setSelectedCar] = useState<Car | null>(cars[0] ?? null);
   const [location, setLocation] = useState<Coord | null>(null);
   const [route, setRoute] = useState<Coord[]>([]);
   const [isTracking, setIsTracking] = useState(false);
@@ -296,7 +294,7 @@ export default function StartScreen() {
 
     // telemetry simulation updates once per second (only if OBD not connected)
     if (!obdConnected) {
-      telemetryRef.current = setInterval(() => {
+      telemetryRef.current = setInterval(async () => {
         // speed between 20 - 80 km/h with small random variation
         setSpeed((s) => Math.max(0, +(s + (Math.random() - 0.45) * 3).toFixed(1) || 30));
         // rpm roughly linked to speed
@@ -314,7 +312,11 @@ export default function StartScreen() {
           throttlePosition: +(Math.max(0, Math.random() * 60)).toFixed(1),
         };
 
-        db.transact(db.tx.obd_metrics[id()].create(data));
+        try {
+          await db.transact(db.tx.obd_metrics[id()].create(data));
+        } catch (err) {
+          console.log(err);
+        }
       }, 1000);
     }
 
@@ -400,7 +402,7 @@ export default function StartScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {Platform.OS !== 'web' && MapView ? (
         <MapView
           provider={PROVIDER_GOOGLE}
@@ -575,7 +577,7 @@ export default function StartScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 

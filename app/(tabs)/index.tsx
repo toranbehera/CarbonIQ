@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
   Alert,
 } from "react-native";
@@ -87,15 +86,15 @@ export default function AuthScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.center}>
+      <View style={styles.center}>
         <ActivityIndicator size="large" color="#111827" />
         <Text style={styles.loadingText}>Loading...</Text>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.authContainer}>
+    <View style={styles.authContainer}>
       <View style={styles.authCard}>
         <Text style={styles.appTitle}>CarbonIQ</Text>
         <Text style={styles.authTitle}>{isRegister ? "Create Account" : "Welcome Back"}</Text>
@@ -140,7 +139,7 @@ export default function AuthScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
