@@ -425,7 +425,7 @@ export default function StartScreen() {
         </View>
       )}
 
-      <ScrollView style={styles.panel} contentContainerStyle={{ paddingBottom: 20 }}>
+      <ScrollView style={styles.panel}>
         {/* Car select row */}
         <View style={styles.row}>
           <View>
@@ -517,25 +517,7 @@ export default function StartScreen() {
             </View>
           </View>
         )}
-
-        {/* Controls */}
-        <View style={styles.controls}>
-          <TouchableOpacity
-            onPress={startTrip}
-            disabled={isTracking}
-            style={[styles.controlBtn, isTracking ? styles.disabledBtn : styles.startBtn]}
-          >
-            <Text style={styles.controlBtnText}>{isTracking ? 'Recording…' : 'Start Journey'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={stopTrip}
-            disabled={!isTracking}
-            style={[styles.controlBtn, !isTracking ? styles.disabledBtn : styles.stopBtn]}
-          >
-            <Text style={styles.controlBtnText}>Stop & Save</Text>
-          </TouchableOpacity>
-        </View>
+        {/* here */}
 
         {/* Last trip summary */}
         {lastTrip && (
@@ -547,6 +529,25 @@ export default function StartScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity
+          onPress={startTrip}
+          disabled={isTracking}
+          style={[styles.controlBtn, isTracking ? styles.disabledBtn : styles.startBtn]}
+        >
+          <Text style={styles.controlBtnText}>{isTracking ? 'Recording…' : 'Start Journey'}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={stopTrip}
+          disabled={!isTracking}
+          style={[styles.controlBtn, !isTracking ? styles.disabledBtn : styles.stopBtn]}
+        >
+          <Text style={styles.controlBtnText}>Stop & Save</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Car selection modal */}
       <Modal visible={carModalVisible} animationType="slide" transparent>
@@ -588,6 +589,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 12,
     backgroundColor: 'transparent',
+    maxHeight: '38%'
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   label: { fontSize: 14, color: '#333', marginBottom: 6, fontWeight: '600' },
@@ -619,9 +621,9 @@ const styles = StyleSheet.create({
   teleRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   teleLabel: { color: '#666' },
   teleValue: { fontWeight: '700', color: '#0b7' },
-  controls: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6 },
+  controls: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10},
   controlBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginHorizontal: 6 },
-  startBtn: { backgroundColor: '#0b3954' },
+  startBtn: { backgroundColor: '#111827' },
   stopBtn: { backgroundColor: '#c62828' },
   disabledBtn: { backgroundColor: '#bdbdbd' },
   controlBtnText: { color: '#fff', fontWeight: '800' },

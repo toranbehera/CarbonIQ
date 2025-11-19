@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
 
   addVehicleButton: {
     backgroundColor: "#111827",
-    paddingVertical: 14,
+    paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 12,
     flexDirection: "row",
@@ -305,7 +305,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 4,
-    marginBottom: 20,
+    // marginBottom: 20,
+    marginBottom: 55,
   },
 
   addVehicleButtonText: {
