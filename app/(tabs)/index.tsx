@@ -1,98 +1,189 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+// app/index.tsx
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const USERS_KEY = "@CarbonIQ_Users"; // list of all users
+const STORAGE_KEY = "@CarbonIQ_CurrentUser"; // currently logged in user
 
-export default function HomeScreen() {
+export default function AuthScreen() {
+  const router = useRouter();
+
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check if already logged in
+  useEffect(() => {
+    (async () => {
+      try {
+        const current = await AsyncStorage.getItem(STORAGE_KEY);
+        if (current) {
+          router.replace("/(tabs)");
+        }
+      } catch (e) {
+        console.warn("Auto-login check failed", e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleAuth = async () => {
+    setError(null);
+    if (!email || !password) return setError("Please enter both email and password.");
+
+    try {
+      const raw = await AsyncStorage.getItem(USERS_KEY);
+      const users = raw ? JSON.parse(raw) : [];
+
+      if (isRegister) {
+        // prevent duplicate registration
+        if (users.find((u: any) => u.email.toLowerCase() === email.toLowerCase())) {
+          return setError("An account with this email already exists.");
+        }
+
+        if (!username.trim()) return setError("Please enter a username.");
+
+        const newUser = {
+          id: Date.now().toString(),
+          username: username.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+          vehicles: [],
+        };
+
+        await AsyncStorage.setItem(USERS_KEY, JSON.stringify([...users, newUser]));
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(newUser));
+        Alert.alert("Success", "Account created successfully!");
+        router.replace("/(tabs)");
+      } else {
+        // LOGIN
+        const found = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+        if (!found) return setError("No account found. Please sign up first.");
+        if (found.password !== password) return setError("Incorrect password.");
+
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(found));
+        router.replace("/(tabs)");
+      }
+    } catch (e) {
+      console.error("Auth error", e);
+      setError("Sign-in failed. Please try again.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#111827" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.authContainer}>
+      <View style={styles.authCard}>
+        <Text style={styles.appTitle}>CarbonIQ</Text>
+        <Text style={styles.authTitle}>{isRegister ? "Create Account" : "Welcome Back"}</Text>
+        <Text style={styles.authSub}>
+          {isRegister ? "Sign up to track your emissions" : "Login to continue"}
+        </Text>
+        {error && <Text style={styles.error}>{error}</Text>}
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        {isRegister && (
+          <TextInput
+            placeholder="Username"
+            value={username}
+            onChangeText={setUsername}
+            style={styles.input}
+            autoCapitalize="none"
+          />
+        )}
+
+        <TextInput
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <TextInput
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          style={styles.input}
+          secureTextEntry
+        />
+
+        <TouchableOpacity style={styles.button} onPress={handleAuth}>
+          <Text style={styles.buttonText}>{isRegister ? "Register" : "Login"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => setIsRegister(!isRegister)}>
+          <Text style={styles.authToggle}>
+            {isRegister ? "Already have an account? Login" : "New here? Create an account"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  authContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f9fafb",
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  authCard: {
+    width: "100%",
+    maxWidth: 400,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  appTitle: { fontSize: 28, fontWeight: "800", color: "#111827", textAlign: "center", marginBottom: 16 },
+  authTitle: { fontSize: 22, fontWeight: "700", textAlign: "center", marginBottom: 6 },
+  authSub: { fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 16 },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 10,
+    width: "100%",
+    padding: 12,
+    marginVertical: 8,
+    backgroundColor: "#fff",
   },
+  button: {
+    backgroundColor: "#111827",
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    marginVertical: 8,
+  },
+  buttonText: { color: "#fff", fontWeight: "700" },
+  authToggle: { color: "#3b82f6", marginTop: 12, textAlign: "center", fontWeight: "500" },
+  error: { color: "#ef4444", textAlign: "center", marginBottom: 6 },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { color: "#6b7280", marginTop: 8 },
 });
