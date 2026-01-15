@@ -1,6 +1,6 @@
 # Steps for installing CarbonIQ
 
-1. Download the Expo Go app from the App store or Play store
+1. Download the Expo Go app on your Android/iOS phone from the App store or Play store
 
 App store: https://apps.apple.com/us/app/expo-go/id982107779
 
